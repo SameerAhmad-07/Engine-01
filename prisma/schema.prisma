@@ -1,0 +1,267 @@
+// Virality Intelligence Simulator – data model.
+// Phase 1 runs without a database (localStorage persistence); this schema is the
+// production target and the API route handlers are written against it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String?
+  createdAt   DateTime     @default(now())
+  simulations Simulation[]
+  agents      Agent[]
+}
+
+model Simulation {
+  id             String            @id @default(cuid())
+  name           String
+  status         String            @default("draft")
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  user           User?             @relation(fields: [userId], references: [id])
+  userId         String?
+  video          VideoAsset?
+  config         SimulationConfig?
+  contentProfile ContentProfile?
+  audience       Json
+  phase          Json
+  seedIds        String[]
+  personas       Persona[]
+  connections    PersonaConnection[]
+  rounds         SimulationRound[]
+  interactions   Interaction[]
+  events         SimulationEvent[]
+  metric         SimulationMetric?
+  verdict        Verdict?
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ContentProfile {
+  id                  String     @id @default(cuid())
+  simulation          Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId        String     @unique
+  contentType         String
+  topics              String[]
+  keywords            String[]
+  productCategory     String?
+  audienceSignals     String[]
+  targetAudienceSignals String[]
+  technicalComplexity Float
+  novelty             Float
+  utility             Float
+  emotionalIntensity  Float
+  credibility         Float
+  visualQuality       Float
+  callToAction        Float
+  summary             String
+  hook                String
+  tone                String
+  estimatedWatchThrough Float
+  analyzedBy          String
+}
+
+model SimulationConfig {
+  id                           String     @id @default(cuid())
+  simulation                   Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId                 String     @unique
+  seedCount                    Int
+  rounds                       Int
+  networkDensity               Float
+  contentQuality               Float
+  audienceRelevance            Float
+  initialEngagementProbability Float
+  shareProbability             Float
+  commentProbability           Float
+  likeProbability              Float
+  ignoreProbability            Float
+  randomSeed                   Int
+}
+
+model VideoAsset {
+  id           String     @id @default(cuid())
+  simulation   Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId String     @unique
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  duration     Float
+  thumbnailUrl String?
+  uploadStatus String     @default("idle")
+  createdAt    DateTime   @default(now())
+}
+
+model Persona {
+  id                 String       @id @default(cuid())
+  simulation         Simulation   @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId       String
+  localId            String
+  name               String
+  age                Int
+  location           String
+  profession         String
+  interests          String[]
+  archetype          String
+  behaviorProfile    Json
+  actionPropensities Json
+  technicalLevel     Float
+  socialActivity     Float
+  influenceScore     Float
+  audienceFit        Float
+  contentAffinity    Float
+  skepticism         Float
+  isTarget           Boolean
+  isSeed             Boolean
+  currentState       String
+  exposureCount      Int      @default(0)
+  engagementHistory  Json
+  outgoing           PersonaConnection[] @relation("outgoing")
+  incoming           PersonaConnection[] @relation("incoming")
+  interactions       Interaction[]
+
+  @@unique([simulationId, localId])
+  @@index([simulationId])
+}
+
+model PersonaConnection {
+  id            String     @id @default(cuid())
+  simulation    Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId  String
+  source        Persona    @relation("outgoing", fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId      String
+  target        Persona    @relation("incoming", fields: [targetId], references: [id], onDelete: Cascade)
+  targetId      String
+  type          String
+  strength      Float
+  activated     Boolean    @default(false)
+  activatedRound Int?
+  createdRound  Int?
+
+  @@index([simulationId])
+}
+
+model SimulationRound {
+  id                String        @id @default(cuid())
+  simulation        Simulation    @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId      String
+  index             Int
+  label             String
+  newlyExposed      Int
+  engagements       Int
+  watches           Int           @default(0)
+  likes             Int
+  comments          Int
+  shares            Int
+  saves             Int           @default(0)
+  follows           Int           @default(0)
+  ignores           Int
+  terminationReason String?
+  interactions      Interaction[]
+
+  @@unique([simulationId, index])
+  @@index([simulationId])
+}
+
+model SimulationEvent {
+  id              String     @id @default(cuid())
+  simulation      Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId    String
+  round           Int
+  timestamp       Int
+  personaId       String
+  action          String
+  sourcePersonaId String?
+  targetPersonaIds String[]
+  reason          String
+  probability     Float
+
+  @@index([simulationId])
+  @@index([simulationId, round])
+}
+
+model Interaction {
+  id              String          @id @default(cuid())
+  simulation      Simulation      @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId    String
+  round           SimulationRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  roundId         String
+  roundIndex      Int
+  persona         Persona         @relation(fields: [personaId], references: [id], onDelete: Cascade)
+  personaId       String
+  sourcePersonaId String?
+  action          String
+  watchedPct      Float
+  engagementScore Float
+  probability     Float           @default(0)
+  reason          String
+  createdAt       DateTime        @default(now())
+
+  @@index([simulationId])
+  @@index([roundId])
+}
+
+model SimulationMetric {
+  id               String     @id @default(cuid())
+  simulation       Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId     String     @unique
+  totalReachPct    Float
+  reachedCount     Int
+  inTargetReached  Int
+  outTargetReached Int
+  targetReachPct   Float  @default(0)
+  shareRatePct     Float
+  engagementRatePct Float
+  cascadeDepth     Int
+  peakRound        Int    @default(0)
+  seedAmplification Float
+  virality         Float
+  actionTotals     Json?
+  reachByRound     Float[]
+}
+
+model Verdict {
+  id           String     @id @default(cuid())
+  simulation   Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  simulationId String     @unique
+  label        String
+  headline     String
+  explanation  String
+  confidence   Float
+  drivers      String[]
+}
+
+/// Phase 1 API persistence: the full simulation aggregate is stored as a JSON
+/// document keyed by id. The relational models above are the Phase 2 target that
+/// the ingestion layer will normalise into.
+model SimulationSnapshot {
+  id        String   @id
+  name      String
+  status    String
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model Agent {
+  id           String  @id @default(cuid())
+  user         User?   @relation(fields: [userId], references: [id])
+  userId       String?
+  name         String
+  kind         String
+  description  String
+  provider     String  @default("mock")
+  model        String?
+  enabled      Boolean @default(true)
+  systemPrompt String
+}
